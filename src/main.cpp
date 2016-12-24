@@ -8,6 +8,7 @@
 #include <malloc.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <iosuhax.h>
 #include <vector>
 #include <set>
 #include <string>
@@ -18,7 +19,7 @@
 #include "common/common.h"
 #include "main.h"
 #include "exploit.h"
-#include "iosuhax.h"
+#include "../payload/wupserver_bin.h"
 
 static const char *sdCardVolPath = "/vol/storage_sdcard";
 static const char *tikPath = "/vol/system/rights/ticket/apps";
@@ -123,7 +124,7 @@ extern "C" int Menu_Main(void)
 	OSScreenClearBufferEx(0, 0);
 	OSScreenClearBufferEx(1, 0);
 
-    println(0,"tik2sd v1.1 by FIX94");
+    println(0,"tik2sd v1.1u1 by FIX94");
 	println(2,"Press A to backup your console tickets.");
 	println(3,"Press B to backup your current disc ticket.");
 
@@ -154,10 +155,6 @@ extern "C" int Menu_Main(void)
     }
 
 	int line = 5;
-	//will inject our custom mcp code
-	println(line++,"Doing IOSU Exploit...");
-	IOSUExploit();
-
 	int fsaFd = -1;
 	int sdMounted = 0, oddMounted = 0;
 	int sdFd = -1, tikFd = -1;
@@ -167,13 +164,25 @@ extern "C" int Menu_Main(void)
 	std::set<std::string> tKeys;
 	directoryEntry_s data;
 
-	//done with iosu exploit, take over mcp
-	if(MCPHookOpen() < 0)
+	//open up iosuhax
+	int res = IOSUHAX_Open(NULL);
+	if(res < 0)
+		res = MCPHookOpen();
+	if(res < 0)
 	{
-		println(line++,"MCP hook could not be opened!");
-		goto prgEnd;
+		println(line++,"Doing IOSU Exploit...");
+		*(volatile unsigned int*)0xF5E70000 = wupserver_bin_len;
+		memcpy((void*)0xF5E70020, &wupserver_bin, wupserver_bin_len);
+		DCStoreRange((void*)0xF5E70000, wupserver_bin_len + 0x40);
+		IOSUExploit();
+		//done with iosu exploit, take over mcp
+		if(MCPHookOpen() < 0)
+		{
+			println(line++,"MCP hook could not be opened!");
+			goto prgEnd;
+		}
+		println(line++,"Done!");
 	}
-	println(line++,"Done!");
 
 	//mount with full permissions
 	fsaFd = IOSUHAX_FSA_Open();
@@ -373,8 +382,11 @@ prgEnd:
 			IOSUHAX_FSA_Unmount(fsaFd, oddTikVolPath, 2);
 		IOSUHAX_FSA_Close(fsaFd);
 	}
-	//close out old mcp instance
-	MCPHookClose();
+	//close out iosuhax
+	if(mcp_hook_fd >= 0)
+		MCPHookClose();
+	else
+		IOSUHAX_Close();
 	sleep(5);
 	//will do IOSU reboot
     OSForceFullRelaunch();
