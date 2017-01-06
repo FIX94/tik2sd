@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 FIX94
+ * Copyright (C) 2016-2017 FIX94
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE file for details.
@@ -102,7 +102,7 @@ int fsa_write(int fsa_fd, int fd, const void *buf, int len)
 }
 
 struct DirName {
-  char n[0x100];
+	char n[0x100];
 };
 
 extern "C" int Menu_Main(void)
@@ -110,37 +110,39 @@ extern "C" int Menu_Main(void)
 	InitOSFunctionPointers();
 	InitSysFunctionPointers();
 	InitVPadFunctionPointers();
-    VPADInit();
+	VPADInit();
+	memoryInitialize();
 
-    // Init screen
-    OSScreenInit();
-    int screen_buf0_size = OSScreenGetBufferSizeEx(0);
-    int screen_buf1_size = OSScreenGetBufferSizeEx(1);
-	uint8_t *screenBuffer = (uint8_t*)memalign(0x100, screen_buf0_size+screen_buf1_size);
-    OSScreenSetBufferEx(0, screenBuffer);
-    OSScreenSetBufferEx(1, (screenBuffer + screen_buf0_size));
-    OSScreenEnableEx(0, 1);
-    OSScreenEnableEx(1, 1);
+	// Init screen
+	OSScreenInit();
+	int screen_buf0_size = OSScreenGetBufferSizeEx(0);
+	int screen_buf1_size = OSScreenGetBufferSizeEx(1);
+	uint8_t *screenBuffer = (uint8_t*)MEMBucket_alloc(screen_buf0_size+screen_buf1_size, 0x100);
+	OSScreenSetBufferEx(0, screenBuffer);
+	OSScreenSetBufferEx(1, (screenBuffer + screen_buf0_size));
+	OSScreenEnableEx(0, 1);
+	OSScreenEnableEx(1, 1);
 	OSScreenClearBufferEx(0, 0);
 	OSScreenClearBufferEx(1, 0);
 
-    println(0,"tik2sd v1.1u1 by FIX94");
+	println(0,"tik2sd v1.1u2 by FIX94");
 	println(2,"Press A to backup your console tickets.");
 	println(3,"Press B to backup your current disc ticket.");
 
-    int vpadError = -1;
-    VPADData vpad;
+	int vpadError = -1;
+	VPADData vpad;
 	//wait for user to decide option
 	int action = 0;
-    while(1)
-    {
-        VPADRead(0, &vpad, 1, &vpadError);
+	while(1)
+	{
+		VPADRead(0, &vpad, 1, &vpadError);
 
-        if(vpadError == 0)
+		if(vpadError == 0)
 		{
 			if((vpad.btns_d | vpad.btns_h) & VPAD_BUTTON_HOME)
 			{
-				free(screenBuffer);
+				MEMBucket_free(screenBuffer);
+				memoryRelease();
 				return EXIT_SUCCESS;
 			}
 			else if((vpad.btns_d | vpad.btns_h) & VPAD_BUTTON_A)
@@ -152,7 +154,7 @@ extern "C" int Menu_Main(void)
 			}
 		}
 		usleep(50000);
-    }
+	}
 
 	int line = 5;
 	int fsaFd = -1;
@@ -248,7 +250,7 @@ extern "C" int Menu_Main(void)
 						fileStat_s stats;
 						IOSUHAX_FSA_StatFile(fsaFd, tikFd, &stats);
 						size_t tikLen = stats.size;
-						uint8_t *tikBuf = (uint8_t*)malloc(tikLen);
+						uint8_t *tikBuf = (uint8_t*)MEMBucket_alloc(tikLen,4);
 						fsa_read(fsaFd, tikFd, tikBuf, tikLen);
 						IOSUHAX_FSA_CloseFile(fsaFd, tikFd);
 						tikFd = -1;
@@ -289,7 +291,7 @@ extern "C" int Menu_Main(void)
 							IOSUHAX_FSA_CloseFile(fsaFd, sdFd);
 							sdFd = -1;
 						}
-						free(tikBuf);
+						MEMBucket_free(tikBuf);
 					}
 				}
 			}
@@ -345,7 +347,7 @@ extern "C" int Menu_Main(void)
 					fileStat_s stats;
 					IOSUHAX_FSA_StatFile(fsaFd, tikFd, &stats);
 					size_t tikLen = stats.size;
-					uint8_t *tikBuf = (uint8_t*)malloc(tikLen);
+					uint8_t *tikBuf = (uint8_t*)MEMBucket_alloc(tikLen,4);
 					fsa_read(fsaFd, tikFd, tikBuf, tikLen);
 					IOSUHAX_FSA_CloseFile(fsaFd, tikFd);
 					tikFd = -1;
@@ -360,7 +362,7 @@ extern "C" int Menu_Main(void)
 							sdFd = -1;
 						}
 					}
-					free(tikBuf);
+					MEMBucket_free(tikBuf);
 				}
 			}
 		}
@@ -389,10 +391,11 @@ prgEnd:
 		IOSUHAX_Close();
 	sleep(5);
 	//will do IOSU reboot
-    OSForceFullRelaunch();
-    SYSLaunchMenu();
-    OSScreenEnableEx(0, 0);
-    OSScreenEnableEx(1, 0);
-	free(screenBuffer);
-    return EXIT_RELAUNCH_ON_LOAD;
+	OSForceFullRelaunch();
+	SYSLaunchMenu();
+	OSScreenEnableEx(0, 0);
+	OSScreenEnableEx(1, 0);
+	MEMBucket_free(screenBuffer);
+	memoryRelease();
+	return EXIT_RELAUNCH_ON_LOAD;
 }
